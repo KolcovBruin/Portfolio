@@ -1,0 +1,134 @@
+import gym
+import collections
+from tensorboardX import SummaryWriter
+import os
+-3-
+ import shutil
+ENV_NAME = "FrozenLake-v0"
+GAMMA = 0.99 # отсроченное награждение, чем дольше путь, тем меньше награда за эту победу
+TEST_EPISODES = 20 #
+class Agent:
+    def __init__(self):
+self.env = gym.make(ENV_NAME) # собственная среда для заполнения опыта. Чтобы у агента была возможность собрать нужный опыт
+self.state = self.env.reset() # состояние в начале эпизода self.reward_table = collections.defaultdict(float) # таблица наград self.transition_table = collections.defaultdict(collections.Counter)
+#таблица переходов
+self.Q = collections.defaultdict(float) #таблица ценности действий
+    def play_n_random_steps(self, count):
+        for _ in range(count):
+#обращаемся к пространству действий и получаем случайное действие action = self.env.action_space.sample()
+переменная
+#выполняем шаг action is_done-попали ли в G или H, _-не нужная
+new_state, reward, is_done, _ = self.env.step(action) #обновляем таблицу наград
+self.reward_table[(self.state, action, new_state)] = reward #обновлем таблицу переходов (настраиваем на новое состояние)
+self.transition_table[(self.state, action)][new_state] += 1 #обновляем состояние, если is_done-true, то значение слева, если
+нет, то справа
+self.state = self.env.reset()if is_done else new_state
+#выбор лучшего шага
+def select_action(self, state):
+        best_action, best_value = None, None
+        for action in range(self.env.action_space.n):
+# лучшее действие выбирается из таблицы ценности действий action_value = self.Q[(state, action)]
+if best_value is None or best_value < action_value:
+                best_value = action_value
+                best_action = action
+        return best_action
+def play_episode(self, env, do_rendering=False): total_reward = 0.0
+#сброс состояния
+state = env.reset()
+while True: #выбор действия
+action = self.select_action(state)
+#получение картежа нового состояния
+new_state, reward, is_done, _ = env.step(action)
+#отрисовка эпизода if do_rendering: env.render()
+#обновление опыта, новые значения возможных переходов для построения вероятностей получше
+#обновление таблицы наград
+self.reward_table[(state, action, new_state)] = reward
+#обновление таблицы переходов(добавление количества переходов) self.transition_table[(state, action)][new_state] += 1 #абсолютная награда считается на каждом шагу(для универсальности) total_reward += reward
+            if is_done:
+                break
+-4-
+
+ state = new_state
+return total_reward
+#структура данных с оценкой последующих состояний действий
+def Q_iteration (self):
+#для всех последующих возможных состояний
+    ####print (self.env.observation_space.n)
+    for state in range(self.env.observation_space.n):
+действий
+#для всех возможных последующих действий
+for action in range(self.env.action_space.n):
+action_value = 0.
+# подсчет сколько новых состояний
+target_counts = self.transition_table[(state, action)]
+#сколько переходов в новые состояния
+total = sum(target_counts.values())
+# по новому состоянию обращаемся ко всем возможным переходам for tgt_state, count in target_counts.items():
+#смотрим какую награду получили за вектор из нового состояния
+reward = self.reward_table[(state, action, tgt_state)] # выясняем какое действие было саммым ценным best_action = self.select_action(tgt_state)
+#Gamma - наказывает за количество произведенных шагов,
+action_value-ценность действия(опыт)
+action_value += (count/total) * (reward+GAMMA *
+self.Q[(tgt_state, best_action)])
+                self.Q[(state, action)] = action_value
+    ####
+    def saveQ(self, save):
+        for state in range(self.env.observation_space.n):
+            for action in range(self.env.action_space.n):
+                save[(state, action)] = self.Q[(state, action)]
+def average_count(self, saveQ):
+newQ = collections.defaultdict(float)
+#подсчет матрицы разниц
+for state in range(self.env.observation_space.n):
+            for action in range(self.env.action_space.n):
+                newQ[(state, action)] = abs(self.Q[(state, action)] -
+saveQ[(state, action)]) i=0
+average_count = 0
+#подсчет среднего у получившейся матрицы
+for state in range(self.env.observation_space.n):
+            for action in range(self.env.action_space.n):
+                i += 1
+average_count += newQ[(state, action)]
+average_count = average_count / i #нашли среднее по элементам return average_count
+if __name__ == "__main__":
+test_env = gym.make(ENV_NAME) #определение среды
+agent = Agent() #определение агента
+writer = SummaryWriter(comment="−q−iteration") # writer графика iter_no = 0
+best_reward = 0.0
+aver_c = 0 #new
+save = collections.defaultdict(float) #new
+while True:
+iter_no += 1
+agent.saveQ(save)
+#проиграть какое то количество сессий(хз сколько) и сделать 100 шагов
+чтоб обновить Q agent.play_n_random_steps(100)
+-5-
+
+agent.Q_iteration() # обновляем таблицу исходя из результата прошлой функции
+reward = 0.0
+# получение награды
+for _ in range(TEST_EPISODES):
+reward += agent.play_episode(test_env)
+# считаем сколько наград получено за TEST_EPISODES эпизодов
+reward /= TEST_EPISODES
+# writer.add_scalar(" reward ", reward, iter_no) #срденее значение наград
+во время эпизода
+#
+#
+ if reward > best_reward:
+     print(" Best reward updated {} −> {}".format(best_reward, reward))
+     best_reward = reward
+#
+diff = agent.average_count(save)
+writer.add_scalar("Difference", diff, iter_no)
+print("Средняя разница между значениями Q до и Q после: %f" % diff)
+# if reward > 0.90:
+      print(" Solved in %d iterations ! " % iter_no)
+      break
+# if diff < 0.0000001 and diff > 0:  #
+ if diff < 0.00001 and diff > 0:
+     print("Solved in %d iterations!" % iter_no)
+            break
+    if os.path.exists("recording"):
+shutil.rmtree("recording")
+env = gym.make(ENV_NAME) # снова определяем среду agent.play_episode(env, True) #проиграть эпизод и показать как он играет writer.close()
