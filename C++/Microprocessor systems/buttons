@@ -1,0 +1,209 @@
+;Вариант задания:
+;В исходном состоянии – автоматическое прибавление 3 каждые 1,5 сек.
+;При нажатии на кнопку (с кликом) складывается левый и правый разряд и результат помещается в оба разряда.
+;При отпускании кнопки счет продолжается.
+#INCLUDE "P16F877A.INC" ; Подключаем файл с символьными обозначениями __CONFIG(0x3972)
+;создание символьных обозначений переменных
+;переменные - текущие значения
+LEFT equ 20h
+RIGHT equ 21h
+RIGHT_S equ 22h ;для смены значений
+;переменные для кодировок цифр TMP_LEFT equ 29h TMP_RIGHT equ 2Ah
+;переменные - счетчики
+COUNT_LEFT equ 23h
+COUNT_RIGHT equ 24h
+COUNT_SWOP equ 25h ;для смены значений
+;переменные для прерывания BUFFER_W equ 26h BUFFER_S equ 27h CHANGER equ 28h
+;переменные для задержки COUNT1 EQU 2Bh COUNT2 EQU 2Ch COUNT3 EQU 2Dh
+;переменные для звука COUNT4 EQU 2Eh TMP EQU 2Fh
+CNT_3 equ 30h CNT_SUM EQU 31h LEFT_S equ 32h
+ORG 0 ;Текущий АДРЕС в ПЗУ = 0
+BSF INTCON, GIE ;Флаг разрешения прерываний
+BSF INTCON, TMR0IE ;Разрешить прерывания от TMR0 GOTO START ;Переход на метку START
+ORG 4 ;Текущий АДРЕС в ПЗУ = 4
+MOVWF BUFFER_W ;Занести значение из АКК MOVFW STATUS ;Запомнить значение регистра STATUS MOVWF BUFFER_S ;Занести значение из АКК
+3
+ BTFSS CHANGER,0 ;пропустить команду если бит = 1 MOVFW TMP_LEFT ;Занести значение в АКК
+BTFSC CHANGER,0 ;пропустить команду если бит = 0 MOVFW TMP_RIGHT ;Занести значение в АКК MOVWF PORTC ;Заслать значение из АКК в РЕГ MOVFW CHANGER ;Запись в АКК
+XORLW 0x1 ;Обратить значение флага MOVWF CHANGER ;Заслать из АКК в РЕГ
+BCF INTCON,2 ;Выдать лог. 0 на INTCON,2
+MOVFW BUFFER_S ;Занести значение в АКК
+MOVWF STATUS ;Восстановить значение регистра STATUS MOVFW BUFFER_W ;Занести значение в АКК
+RETFIE ;Возврат из прерывания
+START:
+BSF STATUS, RP0 ;Активная страница - 1
+CLRF TRISB ;Установить все выводы порта B на вывод CLRF TRISC ;Установить все выводы порта C на вывод BCF OPTION_REG, T0CS ;Внутренний ТГ
+BCF STATUS, RP0 ; Активная страница - 0 CLRF PORTC ;На все выходы PORTC - лог. 0 CLRF PORTB ;На все выходы PORTB - лог. 0
+CALL ZERO_LEFT ;вызов процедуры для обнуления левого индикатора CALL ZERO_RIGHT ;вызов процедуры для обнуления правого индикатора CALL ZERO_CNT_3
+CALL DELAY
+MAIN_PROGRAM:
+DECFSZ CNT_3, F GOTO INC
+CALL ZERO_CNT_3 CALL DELAY
+;BTFSS PORTB, 5 ;«кнопка 5 нажата?» ;GOTO RIGHT_INC ;+1 в правый индикатор
+;BTFSS PORTB, 6 ;«кнопка 6 нажата?» ;GOTO LEFT_INC ;+1 в левый индикатор
+;BTFSS PORTB, 7 ;«кнопка 7 нажата?»
+;GOTO CHANGE ;«да» - смена показаний индикаторов
+GOTO MAIN_PROGRAM ;идем в цикл INC:
+4
+
+ DECFSZ COUNT_RIGHT, F ;декремент COUNT_RIGHT (если 0, то пропускаем следующую)
+GOTO RIGHT_NZ ;переход на метку RIGHT_NZ
+CALL ZERO_RIGHT ;вызов процедуры обнуления правого индикатора DECFSZ COUNT_LEFT, F ;декремент COUNT_RIGHT
+GOTO LEFT_NZ ;переход на метку LEFT_NZ
+CALL ZERO_LEFT ;вызов процедуры обнуления правого индикатора GOTO MAIN_PROGRAM ;идем в цикл
+RIGHT_NZ:
+INCF RIGHT, F ;инкремент переменной RIGHT
+;CALL MASROM_RIGHT ;вызов процедуры массива для правого индикатора ;MOVWF TMP_RIGHT ;запись в TMP_RIGHT «кодировки» нужной цифры
+GOTO MAIN_PROGRAM ;идем в цикл
+LEFT_NZ:
+INCF LEFT, F ;инкремент переменной LEFT
+;CALL MASROM_LEFT ;вызов процедуры массива для правого индикатора ;MOVWF MAIN_PROGRAM ;запись в TMP_RIGHT «кодировки» нужной цифры
+GOTO MAIN_PROGRAM ;идем в цикл
+INC_KNOPKA: DECFSZ CNT_SUM, F goto INC_K
+CALL ZERO_CNT_3
+GOTOKNOPKA_N ;идемвцикл INC_K:
+DECFSZ COUNT_RIGHT, F ;декремент COUNT_RIGHT (если 0, то пропускаем следующую)
+GOTO RIGHT_K ;переход на метку RIGHT_NZ
+CALL ZERO_RIGHT ;вызов процедуры обнуления правого индикатора DECFSZ COUNT_LEFT, F ;декремент COUNT_RIGHT
+GOTO LEFT_K ;переход на метку LEFT_NZ
+5
+
+ CALL ZERO_LEFT ;вызов процедуры обнуления правого индикатора goto INC_KNOPKA;идем в цикл
+RIGHT_K:
+INCF RIGHT, F ;инкремент переменной LEFT
+goto INC_KNOPKA ;идем в цикл LEFT_K:
+INCF LEFT, F ;инкремент переменной LEFT goto INC_KNOPKA ;идем в цикл
+KNOPKA:
+BSF PORTB, 5 ;лог. 1 на кнопку BTFSS PORTB, 5 ;
+goto SUM
+goto LOOPZ1_2
+SUM:
+CALL beeper
+MOVLW 0x00 ;запись в АКК 0 MOVWF CNT_SUM
+MOVF RIGHT_S,W
+ADDWF LEFT_S,W
+MOVWF CNT_SUM
+INCF CNT_SUM, F
+CALL ZERO_RIGHT
+CALL ZERO_LEFT
+call ZERO_CNT_3
+goto INC_KNOPKA
+;CALL INC_KNOPKA
+KNOPKA_N:
+BSF PORTB, 5 ;лог. 1 на кнопку BTFSS PORTB, 5
+GOTO KNOPKA_N goto LOOPZ1_2
+ZERO_LEFT ;обнуление LEFT MOVLW 0x00 ;запись в АКК 0
+6
+
+ MOVWF LEFT ;заслать из АКК в ПЕР. LEFT
+MOVLW 0x0A ;счётчик до 10
+MOVWF COUNT_LEFT ;записываем в переменную COUNT_RIGHT RETURN
+ZERO_RIGHT ;обнуление RIGHT
+MOVLW 0x0 ;запись в АКК 0
+MOVWF RIGHT ;заслать из АКК в ПЕР. RIGHT
+MOVLW 0x0A ;счётчик до 10
+MOVWF COUNT_RIGHT ;записываем в переменную COUNT_RIGHT RETURN
+ZERO_CNT_3 MOVLW 0x0
+MOVF RIGHT,W MOVWF RIGHT_S MOVLW 0x0 MOVF LEFT,W MOVWF LEFT_S
+MOVF RIGHT,W
+CALL MASROM_RIGHT ;вызов процедуры массива для правого индикатора MOVWF TMP_RIGHT ;запись в TMP_RIGHT «кодировки» нужной цифры MOVF LEFT,W
+CALL MASROM_LEFT ;вызов процедуры массива для правого индикатора MOVWF TMP_LEFT ;запись в TMP_RIGHT «кодировки» нужной цифры MOVLW 0x4 ;счётчик до 10
+MOVWF CNT_3 ;записываем в переменную COUNT_RIGHT
+RETURN
+DEL AY
+MOVLW 0x20 MOVWF COUNT1
+LOOPZ1:
+goto KNOPKA
+LOOPZ1_2: CALL DELAY2
+DECFSZ COUNT1,F GOTO LOOPZ1 RETURN
+DELAY2:
+MOVLW 0xFF MOVWF COUNT2
+LOOPZ2:
+CALL DELAY3
+DECFSZ COUNT2,F GOTO LOOPZ2 RETURN
+7
+
+ DELAY3:
+MOVLW 0xFF MOVWF COUNT3
+LOOPZ3:
+DECFSZ COUNT3,F GOTO LOOPZ3 RETURN
+beeper
+BSF STATUS,RP0 clrf TRISB
+BCF STATUS,RP0 MOVLW .20 MOVWF TMP
+BEEPLOOP:
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP
+8
+
+ BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+9
+
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+BSF PORTB,3
+CALL DELAY_BEEP BCF PORTB,3
+CALL DELAY_BEEP
+DECFSZ TMP,F GOTO BEEPLOOP RETURN
+DELAY_BEEP MOVLW 0xCF MOVWF COUNT4
+LOOPB:
+DECFSZ COUNT4,F GOTO LOOPB RETURN
+MASROM_LEFT ;Массив цифр левого индикатора ADDWF PCL, F ;Сложение PCL и аккумулятора RETLW 0x90 ;0
+RETLW 0xdb ;1
+RETLW 0x8c ;2 RETLW 0x89 ;3 RETLW 0xc3 ;4 RETLW 0xa1 ;5 RETLW 0xa0 ;6 RETLW 0x9b ;7 RETLW 0x80 ;8 RETLW 0x81 ;9
+MASROM_RIGHT ;Массив цифр правого индикатора ADDWF PCL, F ;Сложение PCL и аккумулятора RETLW 0x10 ;0
+RETLW 0x5b ;1
+RETLW 0xc ;2 RETLW 0x9 ;3 RETLW 0x43 ;4 RETLW 0x21 ;5 RETLW 0x20 ;6 RETLW 0x1b ;7 RETLW 0x0 ;8 RETLW 0x1 ;9
+END
